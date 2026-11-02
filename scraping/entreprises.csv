@@ -1,0 +1,61 @@
+nom,domaine,secteur,url_trustpilot,nb_avis_affiche
+Cdiscount,www.cdiscount.com,commerce,https://fr.trustpilot.com/review/www.cdiscount.com,288549
+Fnac,www.fnac.com,commerce,https://fr.trustpilot.com/review/www.fnac.com,29923
+Darty,www.darty.com,commerce,https://fr.trustpilot.com/review/www.darty.com,18327
+Boulanger,boulanger.com,commerce,https://fr.trustpilot.com/review/boulanger.com,11821
+Back Market,www.backmarket.fr,commerce,https://fr.trustpilot.com/review/www.backmarket.fr,100497
+Rakuten France,fr.shopping.rakuten.com,commerce,https://fr.trustpilot.com/review/fr.shopping.rakuten.com,120833
+ManoMano,manomano.fr,commerce,https://fr.trustpilot.com/review/manomano.fr,101469
+La Redoute,laredoute.com,commerce,https://fr.trustpilot.com/review/laredoute.com,1211
+Zalando,www.zalando.fr,commerce,https://fr.trustpilot.com/review/www.zalando.fr,8370
+Veepee,www.veepee.fr,commerce,https://fr.trustpilot.com/review/www.veepee.fr,31751
+Temu,temu.com,commerce,https://fr.trustpilot.com/review/temu.com,56665
+AliExpress,www.aliexpress.com,commerce,https://fr.trustpilot.com/review/www.aliexpress.com,188959
+Decathlon,www.decathlon.fr,commerce,https://fr.trustpilot.com/review/www.decathlon.fr,3353
+Leroy Merlin,www.leroymerlin.fr,commerce,https://fr.trustpilot.com/review/www.leroymerlin.fr,19405
+Castorama,www.castorama.fr,commerce,https://fr.trustpilot.com/review/www.castorama.fr,4752
+Carrefour,www.carrefour.fr,commerce,https://fr.trustpilot.com/review/www.carrefour.fr,5184
+E.Leclerc,www.e-leclerc.com,commerce,https://fr.trustpilot.com/review/www.e-leclerc.com,4129
+Norauto,www.norauto.fr,commerce,https://fr.trustpilot.com/review/www.norauto.fr,5668
+Conforama,www.conforama.fr,commerce,https://fr.trustpilot.com/review/www.conforama.fr,7645
+Maisons du Monde,maisonsdumonde.com/fr,commerce,https://fr.trustpilot.com/review/maisonsdumonde.com/fr,13282
+Booking.com,www.booking.com,voyage,https://fr.trustpilot.com/review/www.booking.com,127938
+eDreams,www.edreams.com,voyage,https://fr.trustpilot.com/review/www.edreams.com,428934
+Kiwi.com,kiwi.com,voyage,https://fr.trustpilot.com/review/kiwi.com,205583
+Omio,omio.com,voyage,https://fr.trustpilot.com/review/omio.com,23282
+lastminute.com,www.lastminute.com,voyage,https://fr.trustpilot.com/review/www.lastminute.com,231731
+Voyage Prive,www.voyage-prive.com,voyage,https://fr.trustpilot.com/review/www.voyage-prive.com,84935
+SNCF Connect,sncf-connect.com,voyage,https://fr.trustpilot.com/review/sncf-connect.com,1366
+Hotels.com,www.hotels.com,voyage,https://fr.trustpilot.com/review/www.hotels.com,14254
+Transavia,www.transavia.com,voyage,https://fr.trustpilot.com/review/www.transavia.com,16750
+Promovacances,www.promovacances.com,voyage,https://fr.trustpilot.com/review/www.promovacances.com,14717
+FlixBus,flixbus.fr,voyage,https://fr.trustpilot.com/review/flixbus.fr,8522
+Ryanair,www.ryanair.com,voyage,https://fr.trustpilot.com/review/www.ryanair.com,33011
+easyJet,www.easyjet.com,voyage,https://fr.trustpilot.com/review/www.easyjet.com,79223
+Air France,www.airfrance.fr,voyage,https://fr.trustpilot.com/review/www.airfrance.fr,6336
+TUI France,www.tui.fr,voyage,https://fr.trustpilot.com/review/www.tui.fr,3631
+Expedia,www.expedia.fr,voyage,https://fr.trustpilot.com/review/www.expedia.fr,1867
+Airbnb,www.airbnb.com,voyage,https://fr.trustpilot.com/review/www.airbnb.com,18443
+Opodo,www.opodo.com,voyage,https://fr.trustpilot.com/review/www.opodo.com,320524
+BlaBlaCar,blablacar.com,voyage,https://fr.trustpilot.com/review/blablacar.com,18573
+Trainline,www.thetrainline.com,voyage,https://fr.trustpilot.com/review/www.thetrainline.com,155449
+Chronopost,www.chronopost.fr,livraison,https://fr.trustpilot.com/review/www.chronopost.fr,206967
+Mondial Relay,mondialrelay.fr,livraison,https://fr.trustpilot.com/review/mondialrelay.fr,555800
+La Poste,www.laposte.fr,livraison,https://fr.trustpilot.com/review/www.laposte.fr,15171
+DHL,www.dhl.com,livraison,https://fr.trustpilot.com/review/www.dhl.com,29436
+UPS,www.ups.com,livraison,https://fr.trustpilot.com/review/www.ups.com,50906
+FedEx,www.fedex.com,livraison,https://fr.trustpilot.com/review/www.fedex.com,54529
+DPD,dpd.fr,livraison,https://fr.trustpilot.com/review/dpd.fr,145820
+GLS France,gls-france.com,livraison,https://fr.trustpilot.com/review/gls-france.com,23861
+Colis Prive,colisprive.fr,livraison,https://fr.trustpilot.com/review/colispriv%C3%A9.fr,179763
+Relais Colis,www.relaiscolis.com,livraison,https://fr.trustpilot.com/review/www.relaiscolis.com,25676
+Packlink,www.packlink.com,livraison,https://fr.trustpilot.com/review/www.packlink.com,37021
+Boxtal,www.boxtal.com,livraison,https://fr.trustpilot.com/review/www.boxtal.com,4849
+Cocolis,www.cocolis.fr,livraison,https://fr.trustpilot.com/review/www.cocolis.fr,5313
+ColisExpat,www.colisexpat.com,livraison,https://fr.trustpilot.com/review/www.colisexpat.com,13965
+Eurosender,eurosender.com,livraison,https://fr.trustpilot.com/review/eurosender.com,58073
+Sendcloud,www.sendcloud.com,livraison,https://fr.trustpilot.com/review/www.sendcloud.com,4005
+Asendia,asendia.com,livraison,https://fr.trustpilot.com/review/asendia.com,2984
+Ecoparcel,ecoparcel.eu,livraison,https://fr.trustpilot.com/review/ecoparcel.eu,15419
+Send My Bag,sendmybag.com,livraison,https://fr.trustpilot.com/review/sendmybag.com,29599
+Shiply,www.shiply.com,livraison,https://fr.trustpilot.com/review/www.shiply.com,73829

@@ -35,3 +35,4 @@ android/.idea/
 .idea/
 .DS_Store
 Thumbs.db
+!scraping/entreprises.csv
