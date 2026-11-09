@@ -14,6 +14,9 @@ venv/
 
 # Données et modèles (trop lourds / données personnelles)
 data/*
+page1_6mois/
+page1_6mois*.zip
+exports/
 !data/.gitkeep
 *.csv
 *.parquet
