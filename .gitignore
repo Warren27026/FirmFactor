@@ -38,5 +38,6 @@ Thumbs.db
 
 .scrapy/
 !scraping/entreprises.csv
-
-
+!scraping/cibles_6mois.csv
+!scraping/pages1_a_enregistrer.csv
+Start projet.txt
