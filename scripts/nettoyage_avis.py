@@ -112,28 +112,46 @@ MIN_CAR_DOUBLON = 30  # on ne cherche des doublons que sur des textes assez long
 CAR_DETECTION = 500   # langdetect n'a pas besoin du texte entier pour reconnaître la langue
 TAILLE_LOT_LANGUE = 2000
 
-_detect = None
+# Langues possibles et probabilité de départ. Les avis viennent de sites français : sans ce
+# coup de pouce, langdetect classait des avis courts ou en MAJUSCULES en catalan, allemand,
+# espagnol... (« Très bien merci » -> es, « SIMPLE ET RAPIDE » -> en). Langue absente = exclue.
+LANGUES_PRIOR = {"fr": 0.80, "en": 0.10, "es": 0.02, "it": 0.02, "de": 0.02, "pt": 0.02,
+                 "nl": 0.02, "ru": 0.01, "ar": 0.01}
+# Une autre langue que le français n'est retenue que si langdetect en est sûr ET que l'avis
+# est assez long ; sinon on garde « fr ».
+PROBA_MIN_ETRANGER = 0.90
+MOTS_MIN_ETRANGER = 5
+
+_factory = None
 
 
 def _init_langdetect():
-    """Import et graine faits UNE fois par processus (et non à chaque avis)."""
-    global _detect
+    """Profils de langues chargés UNE fois par processus (et non à chaque avis)."""
+    global _factory
     try:
-        from langdetect import DetectorFactory, detect
+        from langdetect import DetectorFactory
+        from langdetect import detector_factory
         DetectorFactory.seed = 0           # résultat reproductible
-        _detect = detect
+        detector_factory.init_factory()
+        _factory = detector_factory._factory
     except ImportError:
-        _detect = None
+        _factory = None
 
 
 def _langue(texte, nb_mots):
     """Code langue (fr, en...) ou None si le texte est trop court pour être fiable."""
-    if nb_mots < MIN_MOTS or _detect is None:
+    if nb_mots < MIN_MOTS or _factory is None:
         return None
     try:
-        return _detect(texte[:CAR_DETECTION])
+        d = _factory.create()
+        d.set_prior_map(LANGUES_PRIOR)
+        d.append(texte[:CAR_DETECTION].lower())   # les MAJUSCULES trompent langdetect
+        meilleure = d.get_probabilities()[0]
     except Exception:                      # texte sans lettres, etc.
         return None
+    if meilleure.lang != "fr" and (meilleure.prob < PROBA_MIN_ETRANGER or nb_mots < MOTS_MIN_ETRANGER):
+        return "fr"
+    return meilleure.lang
 
 
 def _langues_lot(lot):
