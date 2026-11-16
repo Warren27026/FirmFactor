@@ -36,7 +36,21 @@ def connexion():
         url = "postgresql://" + url[len("postgres://"):]
     if url.startswith("postgresql://"):      # pilote psycopg 3, déjà présent dans requirements.txt
         url = "postgresql+psycopg://" + url[len("postgresql://"):]
-    return create_engine(url, pool_pre_ping=True)
+    engine = create_engine(url, pool_pre_ping=True)
+    try:                                     # test rapide, avec un message clair si ça échoue
+        with engine.connect():
+            pass
+    except Exception as e:
+        premiere_ligne = str(e).splitlines()[0] if str(e) else type(e).__name__
+        sys.exit(
+            "Connexion à la base impossible.\n"
+            f"Détail : {premiere_ligne}\n"
+            "Pistes : 1) mot de passe incorrect ou périmé dans .env ; "
+            "2) caractères spéciaux du mot de passe non encodés (@ # / : ? % -> %40 %23 %2F %3A %3F %25) ; "
+            "3) utiliser la chaîne « Session pooler » (Connect dans Supabase) ; "
+            "4) projet en pause (le relancer dans Supabase)."
+        )
+    return engine
 
 
 def lire_brut(engine):
