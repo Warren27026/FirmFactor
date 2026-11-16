@@ -106,7 +106,7 @@ def nettoyer(df, source="trustpilot", garder_reponses=False, verbose=True):
 # =====================================================================
 MIN_MOTS = 3          # en dessous, pas de détection de langue (langdetect peu fiable)
                       # l'avis reste gardé : « pas mal » + la note sert à l'entraînement
-MIN_CAR_DOUBLON = 30  # on ne cherche des doublons que sur des textes assez longs
+MIN_CAR_DOUBLON = 80  # on ne cherche des doublons que sur des textes assez longs
                       # (« Livraison rapide » écrit par deux clients n'est pas un doublon)
 
 
