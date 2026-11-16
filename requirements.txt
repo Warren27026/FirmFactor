@@ -10,3 +10,5 @@ scrapy==2.*
 beautifulsoup4==4.*
 selenium==4.*
 webdriver-manager==4.*
+sqlalchemy==2.0.*
+langdetect==1.0.*
