@@ -104,7 +104,8 @@ def nettoyer(df, source="trustpilot", garder_reponses=False, verbose=True):
 # =====================================================================
 #  Version « base de données » : table avis  ->  table avis_traites
 # =====================================================================
-MIN_MOTS = 3          # en dessous, l'avis est écarté de l'entraînement (a_garder = False)
+MIN_MOTS = 3          # en dessous, pas de détection de langue (langdetect peu fiable)
+                      # l'avis reste gardé : « pas mal » + la note sert à l'entraînement
 MIN_CAR_DOUBLON = 30  # on ne cherche des doublons que sur des textes assez longs
                       # (« Livraison rapide » écrit par deux clients n'est pas un doublon)
 
@@ -203,7 +204,7 @@ def traiter_avis(df, ids_a_traiter=None, verbose=True):
     out["langue"] = detecter_langues(out["texte_propre"], out["nb_mots"], verbose=verbose)
     out = out[["avis_id", "titre_propre", "texte_propre", "nb_mots", "langue", "est_doublon"]]
 
-    out["a_garder"] = (~out["est_doublon"]) & (out["nb_mots"] >= MIN_MOTS)
+    out["a_garder"] = (~out["est_doublon"]) & (out["nb_mots"] >= 1)   # on écarte doublons et textes vides
     out["traite_le"] = pd.Timestamp.now(tz="UTC")
 
     if verbose:
