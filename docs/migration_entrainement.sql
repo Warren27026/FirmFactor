@@ -12,7 +12,11 @@ alter table avis_traites
   -- date des règles de nettoyage qui ont produit la ligne (VERSION_NETTOYAGE dans nettoyage_avis.py)
   add column if not exists version_nettoyage text;
 
--- Vue unique pour l'entraînement : uniquement les avis gardés, prêts à l'emploi.
+-- a_garder     = qualité seule (indicateurs du tableau de bord, toutes langues)
+-- a_garder_nlp = a_garder ET français (ou langue vide) : c'est le filtre de l'entraînement
+alter table avis_traites add column if not exists a_garder_nlp boolean;
+
+-- Vue unique pour l'entraînement : uniquement les avis gardés pour le NLP, prêts à l'emploi.
 -- reponse_propre n'y figure PAS : le ton de la réponse de l'entreprise trahit la note.
 create or replace view v_entrainement with (security_invoker = true) as
 select
@@ -31,4 +35,4 @@ select
 from avis_traites t
 join avis a        on a.id = t.avis_id
 join entreprises e on e.id = t.entreprise_id
-where t.a_garder;
+where t.a_garder_nlp;

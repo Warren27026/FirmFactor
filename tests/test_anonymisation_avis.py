@@ -155,8 +155,9 @@ def test_traiter_avis_colonnes():
     assert out.loc[1, "titre_tronque"]
     assert out.loc[1, "reponse_propre"] == "Bonjour [PRENOM], Merci ! L'équipe"
     assert out.loc[2, "reponse_propre"] is None
-    assert out.loc[2, "texte_court"] and out.loc[2, "a_garder"]       # langue NULL : gardé
-    assert out.loc[3, "langue"] == "en" and not out.loc[3, "a_garder"]
+    assert out.loc[2, "texte_court"] and out.loc[2, "a_garder_nlp"]   # langue NULL : gardé
+    # anglais : gardé pour les indicateurs (a_garder), écarté du NLP (a_garder_nlp)
+    assert out.loc[3, "langue"] == "en" and out.loc[3, "a_garder"] and not out.loc[3, "a_garder_nlp"]
     assert out.loc[2, "texte_complet"] == "Top. parfait"
     assert list(out["sentiment"]) == ["positif", "neutre", "negatif"]
     assert set(out["jeu"]) <= {"train", "validation", "test"}

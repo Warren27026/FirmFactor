@@ -64,7 +64,8 @@ create table avis_traites (
   langue         text,                             -- détectée automatiquement
   nb_mots        integer,
   est_doublon    boolean default false,            -- même texte publié plusieurs fois
-  a_garder       boolean default true,             -- false = exclu des analyses
+  a_garder       boolean default true,             -- qualité seule : ni doublon, ni texte vide
+  a_garder_nlp   boolean,                          -- a_garder ET français : filtre de l'entraînement
   traite_le      timestamptz default now(),
   -- ajoutées ensuite (voir migration_entrainement.sql)
   reponse_propre    text,                          -- réponse de l'entreprise anonymisée, NULL si aucune

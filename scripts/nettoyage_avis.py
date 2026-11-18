@@ -16,7 +16,7 @@ import pandas as pd
 OBLIGATOIRES = ["entreprise", "secteur", "id_externe", "date_publication", "note", "titre", "texte"]
 
 # Briques pour reconnaître les noms de personnes
-MOT_NOM = r"[A-ZÀ-ÖØ-Þ][A-Za-zÀ-ÖØ-öø-ÿ\-]+"            # « Philippe », « GENTILLEAU », « Jean-Marc »
+MOT_NOM = r"[A-ZÀ-ÖØ-Þ][A-Za-zÀ-ÖØ-öø-ɏ\-]+"            # « Philippe », « GENTILLEAU », « Jean-Marc »
 CIVILITE = r"(?:Monsieur|Madame|Mademoiselle|Mme|Mlle|Mr|Mrs|Ms|M\.)"
 SALUTATION = r"(?:Bonjour|Bonsoir|Salut|Hello|Hi|Dear|Cher|Chère|Chers|Chères)"
 
@@ -47,8 +47,8 @@ _MOTIFS_ANONYMES = [
                 rf"(?!{_MOTS_APRES_CIVILITE}\b){MOT_NOM}(?:[ ]+(?!{_MOTS_APRES_CIVILITE}\b){MOT_NOM})?"),
      r"\1 [NOM]"),
     # Présentation : « je m'appelle nathan zerbib » -> « je m'appelle [PRENOM] »
-    (re.compile(rf"\b(je m['’]appelle|je me nomme|mon (?:pr[ée])?nom est)[ ]+[A-Za-zÀ-ÿ\-]+"
-                rf"(?:[ ]+(?!{_MOTS_PAS_PRENOM}\b)[A-Za-zÀ-ÿ\-]+)?", re.I), r"\1 [PRENOM]"),
+    (re.compile(rf"\b(je m['’]appelle|je me nomme|mon (?:pr[ée])?nom est)[ ]+[A-Za-zÀ-ɏ\-]+"
+                rf"(?:[ ]+(?!{_MOTS_PAS_PRENOM}\b)[A-Za-zÀ-ɏ\-]+)?", re.I), r"\1 [PRENOM]"),
     # IBAN : 2 lettres, 2 chiffres, puis des blocs de 4 (FR76 3000 6000 0112 3456 7890 189)
     (re.compile(r"\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{4}){3,7}(?:[ ]?[A-Z0-9]{1,3})?\b", re.I), "[IBAN]"),
     # Suivi de colis : format postal international (LA123456789FR) et Colissimo (6A12345678901)
@@ -74,7 +74,12 @@ _MOTIFS_ANONYMES = [
 
 def _anonymiser_texte(s):
     """Remplace e-mails, liens, noms après civilité, téléphones, numéros de commande,
-    codes de suivi, IBAN... par des balises."""
+    codes de suivi, IBAN... par des balises.
+
+    LIMITE ASSUMÉE : anonymisation « au mieux » par expressions régulières. Elle couvre les cas
+    prévus (civilité + nom, « je m'appelle », formules d'appel et signatures des réponses) mais PAS
+    un nom isolé au milieu d'une phrase (« j'ai parlé à Dupont »). Pour aller plus loin : un outil
+    de reconnaissance d'entités nommées (spaCy, modèle français). À mentionner dans le rapport."""
     if not s:
         return s
     for motif, balise in _MOTIFS_ANONYMES:
@@ -99,17 +104,47 @@ _PAS_UN_PRENOM = (r"(?:Merci|Nous|Je|J|Suite|Toutes?|Tous|Tout|Il|Elle|On|Votre|
                   r"Client|Cliente|Clients|Clientes|Madame|Monsieur|Mesdames|Messieurs|Mademoiselle|"
                   r"Thank|Thanks|Sorry|We|Customer|Team|Équipe|Equipe|À|A|Au)")
 
+# Une formule d'appel peut être au début OU plus loin (réponses en plusieurs parties :
+# « [Mise à jour : ... Damien] Bonjour Laurence, ... »). PRE = début de texte, ou après « ] \n . ! ? ».
+# Groupe 1 = PRE, groupe 2 = formule (Bonjour...), groupe 3 = civilité (si présente).
+PRE = r"(^|(?<=[\]\n.!?])[ ]*)"
 # « Bonjour Monsieur Dupont, » -> « Bonjour Monsieur [NOM], »
 _SALUT_CIVILITE = re.compile(
-    rf"^({SALUTATION})[ ]+({CIVILITE})[ ]+(?!{CIVILITE}\b)[A-ZÀ-Þ][A-Za-zÀ-ÿ\-'’. ]{{0,40}}?(?=[ ]*[,\n!?])")
-# « Bonjour Philippe, » / « Chère Marie, » / « Bonjour Gilles Champalbert, » -> « Bonjour [PRENOM], »
+    rf"{PRE}({SALUTATION})[ ]+({CIVILITE})[ ]+(?!{CIVILITE}\b)[A-ZÀ-Þ][A-Za-zÀ-ɏ0-9\-'’.&() ]{{0,40}}?(?=[ ]*[,\n!?])")
+# « Bonjour Philippe, » / « Chère Marie, » / « Bonjour Gilles Champalbert, » / « Bonjour Phil49, »
+# / « Bonjour Catherine et tout d'abord merci » -> « Bonjour [PRENOM], »
 _SALUT_PRENOM = re.compile(
-    rf"^({SALUTATION})[ ]+(?!{_PAS_UN_PRENOM}\b)[A-ZÀ-Þ][A-Za-zÀ-ÿ\-'’. ]{{0,40}}?(?=[ ]*[,\n!?])")
+    rf"{PRE}({SALUTATION})[ ]+(?!{_PAS_UN_PRENOM}\b)[A-ZÀ-Þ][A-Za-zÀ-ɏ0-9\-'’.&() ]{{0,40}}?(?=[ ]*[,\n!?]|[ ]+et\b)")
 # Un seul mot juste avant la virgule est un nom, même « Le » ou « Elle » (« Bonjour Le, »),
 # sauf les formules génériques (« Cher Client, », « Bonjour Madame, »)
 _SALUT_MOT_SEUL = re.compile(
-    rf"^({SALUTATION})[ ]+(?!(?:Clients?|Clientes?|Customers?|Madame|Monsieur|Mademoiselle|Mesdames|"
-    rf"Messieurs|Tous|Toutes|Team|Équipe|Equipe|Ami|Amie|Amis)\b)[A-ZÀ-Þ][A-Za-zÀ-ÿ\-]*(?=[ ]*,)")
+    rf"{PRE}({SALUTATION})[ ]+(?!(?:Clients?|Clientes?|Customers?|Madame|Monsieur|Mademoiselle|Mesdames|"
+    rf"Messieurs|Tous|Toutes|Team|Équipe|Equipe|Ami|Amie|Amis)\b)[A-ZÀ-Þ][A-Za-zÀ-ɏ0-9\-]*(?=[ ]*,)")
+# Prénom écrit en minuscules par le client (« Bonjour sylvie, »), sauf les mots génériques
+_SALUT_MINUSCULE = re.compile(
+    rf"{PRE}({SALUTATION})[ ]+(?!(?:clients?|clientes?|tous|toutes|merci|madame|monsieur|mesdames|messieurs|"
+    rf"à|a|et|nous|vous|je|customer|team)\b)[a-zà-ɏ][a-zà-ɏ0-9\-]*(?=[ ]*,)")
+# Signature d'employé au milieu du texte : « ... Bonne fin de journée, Damien] » ou « ..., Damien Bonjour Laurence »
+_SIGNATURE_MILIEU = re.compile(rf"([,.]?\s+)({MOT_NOM})(?=\s*\]|\s+(?:Bonjour|Bonsoir)\b)")
+# Mots capitalisés qui sont des noms d'entreprise et non des prénoms
+_ORGANISATIONS = {"Boulanger", "Cdiscount", "Trustpilot", "Market", "Back", "Amazon", "Darty", "Fnac"}
+
+# « Merci Michel pour votre retour » / « Merci, Caroline, pour ... » / « Merci Jean Yves pour ... »
+# -> « Merci [PRENOM] pour ... ». Forme très fréquente (près de 3 % des réponses).
+# Mots qui suivent « Merci » sans être un prénom : « Merci Beaucoup », « Merci Pour », « Merci Monsieur »...
+_PAS_UN_PRENOM_MERCI = (r"(?:Beaucoup|Infiniment|Encore|Vivement|Bien|Mille|Pour|De|D|À|A|Du|Des|Au|Aux|En|Dans|"
+                        r"Par|Avec|Sur|Si|Je|Il|Elle|Ça|Cela|Ceci|Vous|Nous|Votre|Vos|Ce|Cet|Cette|Un|Une|Les|"
+                        r"Le|La|Et|Tout|Toute|Tous|Toutes|Monsieur|Madame|Mademoiselle|Mme|Mlle|Mr|Client|"
+                        r"Cliente|Clients|Customer|Sincèrement|Cordialement)")
+_MERCI_PRENOM = re.compile(
+    rf"\b(Merci,?[ ]+)(?!{_PAS_UN_PRENOM_MERCI}\b)({MOT_NOM}(?:[ ]+{MOT_NOM})?)"
+    rf"(?=,?[ ]+(?:pour|de|d['’]|à|du|des|ce|cet|cette|votre|vos|beaucoup|infiniment|encore)\b|[ ]*[,.!?]|$)")
+# Signature anglaise : « Yours sincerely, Niyaz, Customer Advocacy Team. » -> « ..., [PRENOM], Customer... »
+_SIGNATURE_ANGLAISE = re.compile(
+    rf"\b((?:Yours sincerely|Yours faithfully|Sincerely|Best regards|Kind regards|Warm regards|Regards)[ ]*,?[ ]+)"
+    rf"({MOT_NOM})(?=[ ]*[,.!]|[ ]*$)")
+# « Christine - Equipe Rakuten France » -> « L'équipe Rakuten France »
+_SIGNATURE_TIRET = re.compile(rf"\b({MOT_NOM})[ ]+[-–][ ]+(?:Equipe|Équipe)\b")
 
 # Premiers mots d'une ligne de fin qui NE sont PAS un prénom (formules de politesse, etc.)
 _FORMULES = {
@@ -119,6 +154,8 @@ _FORMULES = {
     "le", "la", "les", "un", "une", "je", "toute", "toutes", "tout", "tous", "en", "dans", "pour",
     "avec", "encore", "bonjour", "bonsoir", "madame", "monsieur", "mademoiselle", "mme", "mlle",
     "client", "cliente", "clients", "cher", "chère", "ravi", "ravie", "désolé", "désolée",
+    "navrés", "navré", "navrée", "désolés", "désolées", "dommage", "bravo", "félicitations", "bienvenue",
+    "courage", "parfait", "super", "malheureusement", "effectivement", "exactement", "pardon",
 }
 # Ligne « d'équipe » sous la signature : « ABDOU \n Équipe de service à la clientèle »
 _LIGNE_EQUIPE = re.compile(r"^(?:Équipe|Equipe|Service|Team|Customer|L['’][ée]quipe)\b", re.I)
@@ -132,10 +169,19 @@ def _signature(ligne):
     """Remplace par « L'équipe » une signature d'employé ; renvoie la ligne inchangée sinon."""
     ligne = ligne.strip()
     # « Léa, Promovacances » / « Nelson de Back Market » / « Julie de l'équipe Cdiscount »
-    m = re.fullmatch(rf"({MOT_NOM})(?:[ ]*[,\-–][ ]*|[ ]+de[ ]+)((?:[A-ZÀ-Þ]|l['’][ée]quipe).{{0,60}})", ligne)
+    # / « Violaine, de l'équipe Boulanger. » (virgule PUIS « de »)
+    m = re.fullmatch(rf"({MOT_NOM})(?:[ ]*[,\-–][ ]*(?:de[ ]+)?|[ ]+de[ ]+)((?:[A-ZÀ-Þ]|l['’][ée]quipe).{{0,60}})", ligne)
     if m and _est_prenom(m.group(1)):
         return "L'équipe"
-    # « Damien » / « ABDOU » / « Emma » seuls sur la ligne (sans point final : « Navrés. » est une phrase)
+    # « A bientôt, Violaine, de l'équipe Boulanger. » -> « A bientôt, L'équipe »
+    m = re.fullmatch(rf"(.*,[ ]*)({MOT_NOM})(?:[ ]+{MOT_NOM})?,?[ ]+de[ ]+l['’][ée]quipe[ ]+[^,]{{1,40}}", ligne)
+    if m and _est_prenom(m.group(2)):
+        return m.group(1) + "L'équipe"
+    # « Charlotte. » : prénom seul suivi d'un point (les mots courants comme « Navrés. » sont dans _FORMULES)
+    m = re.fullmatch(rf"({MOT_NOM})\.", ligne)
+    if m and _est_prenom(m.group(1)):
+        return "L'équipe"
+    # « Damien » / « ABDOU » / « Emma » seuls sur la ligne
     m = re.fullmatch(rf"({MOT_NOM})(?:[ ]+{MOT_NOM})?", ligne)
     if m and _est_prenom(m.group(1)):
         return "L'équipe"
@@ -155,9 +201,22 @@ def _anonymiser_reponse(s):
     s = s.replace(" ", " ").replace(" ", " ").strip()   # espaces insécables
 
     # 1) Formule d'appel. Les mots qui ne sont pas des noms restent (« Bonjour, merci... »).
-    s = _SALUT_CIVILITE.sub(r"\1 \2 [NOM]", s)
-    s = _SALUT_PRENOM.sub(r"\1 [PRENOM]", s)
-    s = _SALUT_MOT_SEUL.sub(r"\1 [PRENOM]", s)
+    s = _SALUT_CIVILITE.sub(r"\1\2 \3 [NOM]", s)
+    s = _SALUT_PRENOM.sub(r"\1\2 [PRENOM]", s)
+    s = _SALUT_MOT_SEUL.sub(r"\1\2 [PRENOM]", s)
+    s = _SALUT_MINUSCULE.sub(r"\1\2 [PRENOM]", s)
+    s = _MERCI_PRENOM.sub(lambda m: m.group(1) + (m.group(2) if m.group(2).split()[0] in _ORGANISATIONS else "[PRENOM]"), s)
+    s = _SIGNATURE_ANGLAISE.sub(lambda m: m.group(1) + ("[PRENOM]" if m.group(2) not in _ORGANISATIONS else m.group(2)), s)
+    s = _SIGNATURE_MILIEU.sub(
+        lambda m: m.group(1) + ("L'équipe" if _est_prenom(m.group(2)) and m.group(2) not in _ORGANISATIONS else m.group(2)), s)
+    # Prénom seul sur sa ligne, juste après une ligne qui finit par une virgule (« À tout de suite, » / « Damien »)
+    lignes_s = s.split("\n")
+    for i in range(1, len(lignes_s)):
+        mot = lignes_s[i].strip()
+        if lignes_s[i - 1].rstrip().endswith(",") and re.fullmatch(MOT_NOM, mot) and _est_prenom(mot) \
+                and mot not in _ORGANISATIONS:
+            lignes_s[i] = "L'équipe"
+    s = "\n".join(lignes_s)
 
     # 2) Signature : dernière phrase de la dernière ligne non vide
     lignes = [l for l in s.split("\n") if l.strip()]
@@ -169,6 +228,12 @@ def _anonymiser_reponse(s):
         if len(lignes) >= 2 and _LIGNE_EQUIPE.match(lignes[-1]):
             lignes[-2] = _signature(lignes[-2])
     s = "\n".join(lignes)
+
+    # « Sabrina de l'équipe Boulanger » (ou « Sabrina l'équipe ») resté au MILIEU du texte -> « L'équipe ».
+    # Après la signature de fin, qui retire aussi le nom de l'entreprise (« Julie de l'équipe Cdiscount »).
+    s = re.sub(rf"\b({MOT_NOM})(?:[ ]+{MOT_NOM})?,?[ ]+(?:de[ ]+)?(l['’]?[ée]quipe)\b",
+               lambda m: "L'équipe" if _est_prenom(m.group(1)) and m.group(1) not in _ORGANISATIONS else m.group(0), s)
+    s = _SIGNATURE_TIRET.sub(lambda m: "L'équipe" if _est_prenom(m.group(1)) and m.group(1) not in _ORGANISATIONS else m.group(0), s)
 
     # 3) Même masquage que les avis clients ([TEL], [NUM], [EMAIL], [URL], [IBAN]...)
     s = _anonymiser_texte(s)
@@ -244,7 +309,7 @@ MIN_CAR_DOUBLON = 80  # on ne cherche des doublons que sur des textes assez long
 
 # Date des règles de nettoyage : À CHANGER à chaque modification des règles, pour savoir
 # avec quelle version chaque ligne de avis_traites (et donc chaque modèle) a été produite.
-VERSION_NETTOYAGE = "2026-11-18"
+VERSION_NETTOYAGE = "2026-11-18.3"   # .2 : a_garder = qualité seule + a_garder_nlp ; .3 : « Merci Prénom », signatures anglaises/tiret
 
 # Répartition FIXE des avis entre entraînement / validation / test (en %).
 # Calculée à partir de avis_id : un avis reste dans le même jeu à chaque relance.
@@ -389,20 +454,24 @@ def traiter_avis(df, ids_a_traiter=None, verbose=True):
                "langue", "est_doublon", "titre_tronque", "texte_court", "tout_majuscules", "reponse_propre",
                "note", "sentiment", "jeu", "version_nettoyage"]]
 
-    # On écarte doublons, textes vides et avis dans une autre langue que le français.
-    # langue vide (< MIN_MOTS mots, trop court pour détecter) : gardé, les sites sources sont français.
+    # Deux colonnes, deux usages :
+    #  - a_garder     = QUALITÉ seule (ni doublon, ni texte vide). Sert aux indicateurs du tableau de bord :
+    #                   les avis écrits dans une autre langue comptent aussi dans la note d'une entreprise.
+    #  - a_garder_nlp = a_garder ET français (ou langue vide, texte trop court pour détecter : les sites
+    #                   sources sont français). Sert à l'entraînement du modèle de langue.
     francais = out["langue"].isna() | (out["langue"] == "fr")
-    out["a_garder"] = (~out["est_doublon"]) & (out["nb_mots"] >= 1) & francais
+    out["a_garder"] = (~out["est_doublon"]) & (out["nb_mots"] >= 1)
+    out["a_garder_nlp"] = out["a_garder"] & francais
     out["traite_le"] = pd.Timestamp.now(tz="UTC")
 
     if verbose:
         print(f"Traitement : {len(out)} avis | doublons : {int(out.est_doublon.sum())} | "
               f"trop courts (<{MIN_MOTS} mots) : {int((out.nb_mots < MIN_MOTS).sum())} | "
               f"autre langue : {int((~francais).sum())} | "
-              f"a_garder : {int(out.a_garder.sum())} | "
+              f"a_garder : {int(out.a_garder.sum())} | a_garder_nlp : {int(out.a_garder_nlp.sum())} | "
               f"réponses : {int(out.reponse_propre.notna().sum())}")
         print("Langues détectées :", out["langue"].value_counts(dropna=False).head(5).to_dict())
-        gardes = out[out["a_garder"]]
+        gardes = out[out["a_garder_nlp"]]
         print("Avis gardés par sentiment et par jeu (vérifier l'équilibre) :")
         print(pd.crosstab(gardes["sentiment"], gardes["jeu"], margins=True).to_string())
     return out
