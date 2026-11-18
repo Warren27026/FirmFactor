@@ -8,18 +8,77 @@ Le brut n'est jamais modifié : on produit un nouveau tableau.
 """
 import re
 import sys
+import unicodedata
 
 import pandas as pd
 
 OBLIGATOIRES = ["entreprise", "secteur", "id_externe", "date_publication", "note", "titre", "texte"]
-NOM = r"[A-ZÉÈ][\w\-'’\.]*"
+
+# Briques pour reconnaître les noms de personnes
+MOT_NOM = r"[A-ZÀ-ÖØ-Þ][A-Za-zÀ-ÖØ-öø-ÿ\-]+"            # « Philippe », « GENTILLEAU », « Jean-Marc »
+CIVILITE = r"(?:Monsieur|Madame|Mademoiselle|Mme|Mlle|Mr|Mrs|Ms|M\.)"
+SALUTATION = r"(?:Bonjour|Bonsoir|Salut|Hello|Hi|Dear|Cher|Chère|Chers|Chères)"
 
 
 def _nettoyer_texte(s):
     s = "" if pd.isna(s) else str(s)
-    s = s.replace(" ", " ")
+    s = unicodedata.normalize("NFC", s)   # « é » écrit en 1 caractère, jamais « e » + accent
+    s = s.replace("\u00a0", " ").replace("\u202f", " ")   # espaces insécables -> espace normal
     s = re.sub(r"\s+", " ", s)          # retours à la ligne et espaces multiples -> 1 espace
     return s.strip()
+
+
+# ---------------------------------------------------------------------
+#  Anonymisation : données personnelles -> balises
+#  L'ordre compte : du motif le plus précis au plus général.
+# ---------------------------------------------------------------------
+_MOTS_APRES_CIVILITE = r"(?:Le|La|Les|Et|Ou|Votre|Vous|Nous|Merci|Bonjour|Monsieur|Madame|Mademoiselle)"
+_MOTS_PAS_PRENOM = (r"(?:et|je|j|de|du|des|la|le|les|un|une|à|a|au|mais|donc|car|ou|pour|qui|que|"
+                    r"suis|ai|est|client|cliente|depuis|avec|sur|il|elle|nous|vous|merci|bonjour|"
+                    r"dans|en|par|ce|cette|mon|ma|mes|votre|and|from)")
+
+_MOTIFS_ANONYMES = [
+    # E-mail et lien
+    (re.compile(r"[\w.+\-]+@[\w\-]+(?:\.[\w\-]+)+"), "[EMAIL]"),
+    (re.compile(r"\b(?:https?://|www\.)[^\s<>\"]+?(?=[.,;:!?)\]]*(?:\s|$))", re.I), "[URL]"),
+    # Civilité + nom : « Monsieur Dupont », « Mme Martin Durand » -> « Monsieur [NOM] »
+    (re.compile(rf"\b((?i:monsieur|madame|mademoiselle|mme|mlle|mr|m\.))[ ]+"
+                rf"(?!{_MOTS_APRES_CIVILITE}\b){MOT_NOM}(?:[ ]+(?!{_MOTS_APRES_CIVILITE}\b){MOT_NOM})?"),
+     r"\1 [NOM]"),
+    # Présentation : « je m'appelle nathan zerbib » -> « je m'appelle [PRENOM] »
+    (re.compile(rf"\b(je m['’]appelle|je me nomme|mon (?:pr[ée])?nom est)[ ]+[A-Za-zÀ-ÿ\-]+"
+                rf"(?:[ ]+(?!{_MOTS_PAS_PRENOM}\b)[A-Za-zÀ-ÿ\-]+)?", re.I), r"\1 [PRENOM]"),
+    # IBAN : 2 lettres, 2 chiffres, puis des blocs de 4 (FR76 3000 6000 0112 3456 7890 189)
+    (re.compile(r"\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{4}){3,7}(?:[ ]?[A-Z0-9]{1,3})?\b", re.I), "[IBAN]"),
+    # Suivi de colis : format postal international (LA123456789FR) et Colissimo (6A12345678901)
+    (re.compile(r"\b[A-Z]{2}\d{9}[A-Z]{2}\b", re.I), "[SUIVI]"),
+    (re.compile(r"\b\d[A-Z]\d{11}\b", re.I), "[SUIVI]"),
+    # Mot-clé de suivi + code : « numéro de suivi : XY12345678 »
+    (re.compile(r"(\b(?:suivi|colis|tracking)\s*(?:n[°ºo]\.?|num[ée]ro|#)?\s*:?\s*)"
+                r"(?=[\w\-]*\d)[A-Z0-9][A-Z0-9\-]{5,}\b", re.I), r"\1[SUIVI]"),
+    # Mot-clé de commande / facture / référence + identifiant (au moins 5 caractères dont un chiffre)
+    (re.compile(r"(\b(?:commandes?|cde|cmd|factures?|r[ée]f[ée]rence|r[ée]f|dossier|ticket|contrat|"
+                r"client|abonn[ée]|transaction)\s*(?:n[°ºo]\.?|num[ée]ro|num\.?|#)?\s*:?\s*)"
+                r"(?=[\w\-]*\d)[A-Z0-9][A-Z0-9\-]{4,}\b", re.I), r"\1[NUM]"),
+    # 16 chiffres groupés par 4 (numéro de commande ou de carte)
+    (re.compile(r"(?<!\d)\d{4}(?:[ \-]\d{4}){3}(?!\d)"), "[NUM]"),
+    # Téléphone français : 06 12 34 56 78, 06.12.34.56.78, +33 6 12 34 56 78, 0612345678
+    (re.compile(r"(?<![\w+])(?:(?:\+|00)33[ .\-]?(?:\(0\))?[ .\-]?|0)[1-9](?:[ .\-]?\d{2}){4}(?!\d)"), "[TEL]"),
+    # « n° » seul suivi d'un identifiant : « n° 12345L12345 »
+    (re.compile(r"(\bn[°º]\s*:?\s*)(?=[\w\-]*\d)[A-Z0-9][A-Z0-9\-]{4,}\b", re.I), r"\1[NUM]"),
+    # Reste : tout mot contenant 8 chiffres ou plus (collés ou mêlés de lettres)
+    (re.compile(r"\b(?=(?:[A-Z\-]*\d){8})[A-Z0-9][A-Z0-9\-]*\b", re.I), "[NUM]"),
+]
+
+
+def _anonymiser_texte(s):
+    """Remplace e-mails, liens, noms après civilité, téléphones, numéros de commande,
+    codes de suivi, IBAN... par des balises."""
+    if not s:
+        return s
+    for motif, balise in _MOTIFS_ANONYMES:
+        s = motif.sub(balise, s)
+    return s
 
 
 def _assembler(ti, tx):
@@ -29,18 +88,90 @@ def _assembler(ti, tx):
     return f"{ti} {tx}" if ti[-1] in ".!?:" else f"{ti}. {tx}"
 
 
+# ---------------------------------------------------------------------
+#  Réponses des entreprises : prénom du client en tête, signature de l'employé à la fin
+# ---------------------------------------------------------------------
+# Mots qui suivent « Bonjour » sans être un prénom (« Bonjour Nous sommes désolés... »)
+_PAS_UN_PRENOM = (r"(?:Merci|Nous|Je|J|Suite|Toutes?|Tous|Tout|Il|Elle|On|Votre|Vos|Notre|Nos|Ravie?|"
+                  r"Désolée?s?|Dommage|Encore|Après|Avant|Concernant|Pour|En|Et|Le|La|Les|L|Un|Une|"
+                  r"Si|Dans|Comme|Malheureusement|Effectivement|Cet|Cette|Ce|C|Quel|Quelle|Bonne|Belle|"
+                  r"Client|Cliente|Clients|Clientes|Madame|Monsieur|Mesdames|Messieurs|Mademoiselle|"
+                  r"Thank|Thanks|Sorry|We|Customer|Team|Équipe|Equipe|À|A|Au)")
+
+# « Bonjour Monsieur Dupont, » -> « Bonjour Monsieur [NOM], »
+_SALUT_CIVILITE = re.compile(
+    rf"^({SALUTATION})[ ]+({CIVILITE})[ ]+(?!{CIVILITE}\b)[A-ZÀ-Þ][A-Za-zÀ-ÿ\-'’. ]{{0,40}}?(?=[ ]*[,\n!?])")
+# « Bonjour Philippe, » / « Chère Marie, » / « Bonjour Gilles Champalbert, » -> « Bonjour [PRENOM], »
+_SALUT_PRENOM = re.compile(
+    rf"^({SALUTATION})[ ]+(?!{_PAS_UN_PRENOM}\b)[A-ZÀ-Þ][A-Za-zÀ-ÿ\-'’. ]{{0,40}}?(?=[ ]*[,\n!?])")
+# Un seul mot juste avant la virgule est un nom, même « Le » ou « Elle » (« Bonjour Le, »),
+# sauf les formules génériques (« Cher Client, », « Bonjour Madame, »)
+_SALUT_MOT_SEUL = re.compile(
+    rf"^({SALUTATION})[ ]+(?!(?:Clients?|Clientes?|Customers?|Madame|Monsieur|Mademoiselle|Mesdames|"
+    rf"Messieurs|Tous|Toutes|Team|Équipe|Equipe|Ami|Amie|Amis)\b)[A-ZÀ-Þ][A-Za-zÀ-ÿ\-]*(?=[ ]*,)")
+
+# Premiers mots d'une ligne de fin qui NE sont PAS un prénom (formules de politesse, etc.)
+_FORMULES = {
+    "cordialement", "sincèrement", "merci", "bien", "bonne", "belle", "excellente", "excellent",
+    "très", "au", "à", "a", "nous", "votre", "vos", "service", "équipe", "equipe", "team",
+    "customer", "kind", "best", "regards", "amicalement", "salutations", "respectueusement",
+    "le", "la", "les", "un", "une", "je", "toute", "toutes", "tout", "tous", "en", "dans", "pour",
+    "avec", "encore", "bonjour", "bonsoir", "madame", "monsieur", "mademoiselle", "mme", "mlle",
+    "client", "cliente", "clients", "cher", "chère", "ravi", "ravie", "désolé", "désolée",
+}
+# Ligne « d'équipe » sous la signature : « ABDOU \n Équipe de service à la clientèle »
+_LIGNE_EQUIPE = re.compile(r"^(?:Équipe|Equipe|Service|Team|Customer|L['’][ée]quipe)\b", re.I)
+
+
+def _est_prenom(mot):
+    return mot.lower() not in _FORMULES
+
+
+def _signature(ligne):
+    """Remplace par « L'équipe » une signature d'employé ; renvoie la ligne inchangée sinon."""
+    ligne = ligne.strip()
+    # « Léa, Promovacances » / « Nelson de Back Market » / « Julie de l'équipe Cdiscount »
+    m = re.fullmatch(rf"({MOT_NOM})(?:[ ]*[,\-–][ ]*|[ ]+de[ ]+)((?:[A-ZÀ-Þ]|l['’][ée]quipe).{{0,60}})", ligne)
+    if m and _est_prenom(m.group(1)):
+        return "L'équipe"
+    # « Damien » / « ABDOU » / « Emma » seuls sur la ligne (sans point final : « Navrés. » est une phrase)
+    m = re.fullmatch(rf"({MOT_NOM})(?:[ ]+{MOT_NOM})?", ligne)
+    if m and _est_prenom(m.group(1)):
+        return "L'équipe"
+    # « Cordialement, Siya » -> « Cordialement, L'équipe »
+    m = re.fullmatch(rf"(.*,[ ]*)({MOT_NOM})(?:[ ]+{MOT_NOM})?[ ]*[.!]?", ligne)
+    if m and _est_prenom(m.group(2)):
+        return m.group(1) + "L'équipe"
+    return ligne
+
+
 def _anonymiser_reponse(s):
-    if pd.isna(s):
-        return pd.NA
-    s = str(s).replace("\r", "").strip()
-    s = re.sub(r"^(Bonjour|Bonsoir|Salut|Hello)\s+(?!(?:Merci|Nous|Je|Suite|Toutes?|Tout|Il|Votre|Ravi|Désolé|Dommage|Encore)\b)[^,\n]{1,45}(?=,|\n)", r"\1", s)
-    s = re.sub(rf"^(Bonjour|Bonsoir|Salut|Hello)\s+{NOM}(?:\s+{NOM}){{0,2}}\s*(?=,|\n| et |\.)", r"\1", s)
-    s = re.sub(rf"{NOM},?\s+de l['’]équipe\s+\S+\s*$", "L'équipe", s)
-    lignes = s.rstrip().split("\n")
-    if len(lignes) >= 2 and re.fullmatch(rf"{NOM}(?: {NOM})?", lignes[-1].strip()):
-        lignes = lignes[:-1]
-    s = _nettoyer_texte(" ".join(lignes))
-    return re.sub(rf"([!,.])\s+{NOM}$", r"\1", s)
+    """Réponse de l'entreprise -> texte sans prénom/nom du client ni signature d'employé,
+    avec le même masquage que les avis clients, puis nettoyé. NULL reste NULL (None)."""
+    if s is None or pd.isna(s):
+        return None
+    s = unicodedata.normalize("NFC", str(s)).replace("\r", "").replace("\t", " ")
+    s = s.replace(" ", " ").replace(" ", " ").strip()   # espaces insécables
+
+    # 1) Formule d'appel. Les mots qui ne sont pas des noms restent (« Bonjour, merci... »).
+    s = _SALUT_CIVILITE.sub(r"\1 \2 [NOM]", s)
+    s = _SALUT_PRENOM.sub(r"\1 [PRENOM]", s)
+    s = _SALUT_MOT_SEUL.sub(r"\1 [PRENOM]", s)
+
+    # 2) Signature : dernière phrase de la dernière ligne non vide
+    lignes = [l for l in s.split("\n") if l.strip()]
+    if lignes:
+        phrases = re.split(r"(?<=[.!?…])[ ]+", lignes[-1].strip())
+        phrases[-1] = _signature(phrases[-1])
+        lignes[-1] = " ".join(phrases)
+        # ... et la ligne au-dessus si la dernière est « Équipe de service à la clientèle »
+        if len(lignes) >= 2 and _LIGNE_EQUIPE.match(lignes[-1]):
+            lignes[-2] = _signature(lignes[-2])
+    s = "\n".join(lignes)
+
+    # 3) Même masquage que les avis clients ([TEL], [NUM], [EMAIL], [URL], [IBAN]...)
+    s = _anonymiser_texte(s)
+    return _nettoyer_texte(s)
 
 
 def nettoyer(df, source="trustpilot", garder_reponses=False, verbose=True):
@@ -61,8 +192,8 @@ def nettoyer(df, source="trustpilot", garder_reponses=False, verbose=True):
     df = df.drop_duplicates(subset=["id_externe"])       # doublons sur l'identifiant, pas sur le texte
     n_doublons = n0 - n_invalides - len(df)
 
-    df["titre_clean"] = df["titre"].map(_nettoyer_texte).str.rstrip("…").str.strip()
-    df["texte_clean"] = df["texte"].map(_nettoyer_texte)
+    df["titre_clean"] = df["titre"].map(_nettoyer_texte).str.rstrip("…").str.strip().map(_anonymiser_texte)
+    df["texte_clean"] = df["texte"].map(_nettoyer_texte).map(_anonymiser_texte)
     df["texte_total"] = [_assembler(a, b) for a, b in zip(df["titre_clean"], df["texte_clean"])]
     df["titre_tronque"] = df["titre"].fillna("").str.endswith("…")
 
@@ -178,13 +309,15 @@ def detecter_langues(textes, nb_mots, verbose=True):
 
 
 def traiter_avis(df, ids_a_traiter=None, verbose=True):
-    """Entrée : lignes de la table `avis` (id, entreprise_id, titre, texte, date_publication).
+    """Entrée : lignes de la table `avis` (id, entreprise_id, titre, texte, date_publication,
+    reponse_texte).
     Sortie : lignes prêtes pour la table `avis_traites`.
     ids_a_traiter : si donné, seuls ces avis sont renvoyés (les doublons sont quand même
     cherchés sur TOUT `df`, pour comparer les nouveaux avis aux anciens)."""
     df = df.copy()
-    titre = df["titre"].map(_nettoyer_texte).str.rstrip("…").str.strip()
-    texte = df["texte"].map(_nettoyer_texte)
+    # Anonymisation AVANT doublons, langue et nb_mots : on ne garde aucune donnée personnelle.
+    titre = df["titre"].map(_nettoyer_texte).str.rstrip("…").str.strip().map(_anonymiser_texte)
+    texte = df["texte"].map(_nettoyer_texte).map(_anonymiser_texte)
 
     # Doublons : même entreprise + même texte (en minuscules, sans ponctuation). On garde le plus ancien.
     cle = texte.str.lower().str.replace(r"[^\w]+", " ", regex=True).str.strip()
@@ -202,15 +335,36 @@ def traiter_avis(df, ids_a_traiter=None, verbose=True):
     }, index=df.index)[garder]
     out["nb_mots"] = out["texte_propre"].str.split().str.len().fillna(0).astype(int)
     out["langue"] = detecter_langues(out["texte_propre"], out["nb_mots"], verbose=verbose)
-    out = out[["avis_id", "titre_propre", "texte_propre", "nb_mots", "langue", "est_doublon"]]
 
-    out["a_garder"] = (~out["est_doublon"]) & (out["nb_mots"] >= 1)   # on écarte doublons et textes vides
+    # Titre + texte en un seul champ (le titre n'est pas répété si le texte commence par lui,
+    # ce qui arrive avec les titres tronqués « … »)
+    out["texte_complet"] = [_assembler(a, b) for a, b in zip(out["titre_propre"], out["texte_propre"])]
+    out["titre_tronque"] = df.loc[garder, "titre"].fillna("").astype(str).str.rstrip().str.endswith("…")
+    out["texte_court"] = out["nb_mots"] < MIN_MOTS
+    out["tout_majuscules"] = (out["texte_propre"].str.len() > 20) & (out["texte_propre"] == out["texte_propre"].str.upper())
+
+    # Réponse de l'entreprise, anonymisée (prénom du client, signature de l'employé, numéros...).
+    # Pas de réponse -> NULL (et non une chaîne vide).
+    if "reponse_texte" in df.columns:
+        out["reponse_propre"] = df.loc[garder, "reponse_texte"].map(_anonymiser_reponse).astype(object)
+    else:
+        out["reponse_propre"] = None
+
+    out = out[["avis_id", "titre_propre", "texte_propre", "texte_complet", "nb_mots", "langue",
+               "est_doublon", "titre_tronque", "texte_court", "tout_majuscules", "reponse_propre"]]
+
+    # On écarte doublons, textes vides et avis dans une autre langue que le français.
+    # langue vide (< MIN_MOTS mots, trop court pour détecter) : gardé, les sites sources sont français.
+    francais = out["langue"].isna() | (out["langue"] == "fr")
+    out["a_garder"] = (~out["est_doublon"]) & (out["nb_mots"] >= 1) & francais
     out["traite_le"] = pd.Timestamp.now(tz="UTC")
 
     if verbose:
         print(f"Traitement : {len(out)} avis | doublons : {int(out.est_doublon.sum())} | "
               f"trop courts (<{MIN_MOTS} mots) : {int((out.nb_mots < MIN_MOTS).sum())} | "
-              f"a_garder : {int(out.a_garder.sum())}")
+              f"autre langue : {int((~francais).sum())} | "
+              f"a_garder : {int(out.a_garder.sum())} | "
+              f"réponses : {int(out.reponse_propre.notna().sum())}")
         print("Langues détectées :", out["langue"].value_counts(dropna=False).head(5).to_dict())
     return out
 
