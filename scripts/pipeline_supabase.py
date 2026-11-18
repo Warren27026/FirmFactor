@@ -16,6 +16,7 @@ import sys
 
 import pandas as pd
 from dotenv import load_dotenv
+from sqlalchemy.exc import OperationalError
 from sqlalchemy import MetaData, Table, create_engine, inspect, text
 from sqlalchemy.dialects import postgresql, sqlite
 
@@ -24,7 +25,7 @@ from nettoyage_avis import traiter_avis
 TABLE_BRUTE = "avis"
 TABLE_TRAITEE = "avis_traites"
 CLE = "avis_id"
-TAILLE_LOT = 1000
+TAILLE_LOT = 500
 
 
 def connexion():
@@ -54,7 +55,7 @@ def connexion():
 
 
 def lire_brut(engine):
-    sql = f"SELECT id, entreprise_id, titre, texte, date_publication FROM {TABLE_BRUTE}"
+    sql = f"SELECT id, entreprise_id, note, titre, texte, date_publication, reponse_texte FROM {TABLE_BRUTE}"
     return pd.read_sql(text(sql), engine)
 
 
@@ -80,13 +81,25 @@ def ecrire(engine, df):
     insert = (postgresql if engine.dialect.name == "postgresql" else sqlite).insert
     modifiables = [c for c in df.columns if c != CLE]
     lignes = vers_python(df)
-    with engine.begin() as conn:     # une transaction : tout passe ou rien ne passe
-        for i in range(0, len(lignes), TAILLE_LOT):
-            lot = lignes[i:i + TAILLE_LOT]
-            req = insert(table).values(lot)
-            req = req.on_conflict_do_update(index_elements=[CLE], set_={c: req.excluded[c] for c in modifiables})
-            conn.execute(req)
-            print(f"  {min(i + TAILLE_LOT, len(lignes))}/{len(lignes)} lignes écrites", flush=True)
+    postgres = engine.dialect.name == "postgresql"
+    try:
+        with engine.begin() as conn:     # une transaction : tout passe ou rien ne passe
+            if postgres:
+                # Le pooler Supabase coupe les requêtes longues : on laisse plus de temps à CETTE transaction.
+                conn.execute(text("SET LOCAL statement_timeout = '10min'"))
+                conn.execute(text("SET LOCAL lock_timeout = '2min'"))
+                # Verrou : empêche deux lancements en même temps (ils se bloquent et finissent en timeout).
+                if not conn.execute(text("SELECT pg_try_advisory_xact_lock(424242)")).scalar():
+                    sys.exit("Un autre lancement du pipeline est déjà en cours. Attendez son « Terminé », puis relancez.")
+            for i in range(0, len(lignes), TAILLE_LOT):
+                lot = lignes[i:i + TAILLE_LOT]
+                req = insert(table).values(lot)
+                req = req.on_conflict_do_update(index_elements=[CLE], set_={c: req.excluded[c] for c in modifiables})
+                conn.execute(req)
+                print(f"  {min(i + TAILLE_LOT, len(lignes))}/{len(lignes)} lignes écrites", flush=True)
+    except OperationalError as e:
+        sys.exit("Écriture annulée (rien n'a été modifié) : " + str(e.orig).splitlines()[0] +
+                 "\nCause fréquente : un autre lancement du pipeline tourne encore. N'en lancez qu'un seul à la fois.")
 
 
 def main():
