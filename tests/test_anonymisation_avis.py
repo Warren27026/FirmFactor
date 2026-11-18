@@ -4,7 +4,9 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from nettoyage_avis import _anonymiser_texte  # noqa: E402
+import pandas as pd  # noqa: E402
+
+from nettoyage_avis import VERSION_NETTOYAGE, _anonymiser_texte  # noqa: E402
 
 
 @pytest.mark.parametrize("brut, attendu", [
@@ -141,6 +143,7 @@ def test_traiter_avis_colonnes():
     df = pd.DataFrame({
         "id": [1, 2, 3],
         "entreprise_id": [1, 1, 1],
+        "note": [5, 3, 1],
         "titre": ["Livraison très rapide et…", "Top", "Very good"],
         "texte": ["Livraison très rapide et produit conforme, merci Monsieur Dupont",
                   "parfait", "Very good service, I will order again for sure"],
@@ -155,3 +158,22 @@ def test_traiter_avis_colonnes():
     assert out.loc[2, "texte_court"] and out.loc[2, "a_garder"]       # langue NULL : gardé
     assert out.loc[3, "langue"] == "en" and not out.loc[3, "a_garder"]
     assert out.loc[2, "texte_complet"] == "Top. parfait"
+    assert list(out["sentiment"]) == ["positif", "neutre", "negatif"]
+    assert set(out["jeu"]) <= {"train", "validation", "test"}
+    assert (out["version_nettoyage"] == VERSION_NETTOYAGE).all()
+
+
+def test_jeu_fixe_et_bien_reparti():
+    from nettoyage_avis import _jeu
+    assert _jeu(12345) == _jeu(12345)                         # toujours le même jeu
+    jeux = pd.Series([_jeu(i) for i in range(1, 20001)]).value_counts(normalize=True)
+    assert abs(jeux["train"] - 0.80) < 0.02
+    assert abs(jeux["validation"] - 0.10) < 0.02
+    assert abs(jeux["test"] - 0.10) < 0.02
+
+
+@pytest.mark.parametrize("note, attendu", [(1, "negatif"), (2, "negatif"), (3, "neutre"),
+                                           (4, "positif"), (5, "positif"), (None, None)])
+def test_sentiment_depuis_note(note, attendu):
+    from nettoyage_avis import _sentiment
+    assert _sentiment(note) == attendu

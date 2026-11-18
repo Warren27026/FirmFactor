@@ -54,7 +54,7 @@ def connexion():
 
 
 def lire_brut(engine):
-    sql = f"SELECT id, entreprise_id, titre, texte, date_publication, reponse_texte FROM {TABLE_BRUTE}"
+    sql = f"SELECT id, entreprise_id, note, titre, texte, date_publication, reponse_texte FROM {TABLE_BRUTE}"
     return pd.read_sql(text(sql), engine)
 
 

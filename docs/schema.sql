@@ -65,8 +65,20 @@ create table avis_traites (
   nb_mots        integer,
   est_doublon    boolean default false,            -- même texte publié plusieurs fois
   a_garder       boolean default true,             -- false = exclu des analyses
-  traite_le      timestamptz default now()
+  traite_le      timestamptz default now(),
+  -- ajoutées ensuite (voir migration_entrainement.sql)
+  reponse_propre    text,                          -- réponse de l'entreprise anonymisée, NULL si aucune
+  texte_complet     text,                          -- titre + texte : entrée des modèles
+  titre_tronque     boolean,
+  texte_court       boolean,
+  tout_majuscules   boolean,
+  entreprise_id     bigint references entreprises(id),
+  note              smallint check (note between 1 and 5),
+  sentiment         text check (sentiment in ('negatif', 'neutre', 'positif')),   -- 1-2 / 3 / 4-5
+  jeu               text check (jeu in ('train', 'validation', 'test')),          -- fixe : 80/10/10
+  version_nettoyage text                           -- date des règles de nettoyage
 );
+-- Vue v_entrainement (avis gardés, prêts pour l'entraînement) : voir migration_entrainement.sql
 
 -- ---------------------------------------------------------------------
 -- 4. ANNOTATIONS — vérité terrain annotée à la main (étape 2)

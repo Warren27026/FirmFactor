@@ -6,6 +6,7 @@ Deux usages :
 
 Le brut n'est jamais modifié : on produit un nouveau tableau.
 """
+import hashlib
 import re
 import sys
 import unicodedata
@@ -241,7 +242,31 @@ MIN_CAR_DOUBLON = 80  # on ne cherche des doublons que sur des textes assez long
                       # (« Livraison rapide » écrit par deux clients n'est pas un doublon)
 
 
-CAR_DETECTION = 500   # langdetect n'a pas besoin du texte entier pour reconnaître la langue
+# Date des règles de nettoyage : À CHANGER à chaque modification des règles, pour savoir
+# avec quelle version chaque ligne de avis_traites (et donc chaque modèle) a été produite.
+VERSION_NETTOYAGE = "2026-11-18"
+
+# Répartition FIXE des avis entre entraînement / validation / test (en %).
+# Calculée à partir de avis_id : un avis reste dans le même jeu à chaque relance.
+PART_TRAIN, PART_VALIDATION = 80, 10      # le reste (10 %) = test
+
+
+def _jeu(avis_id):
+    """train / validation / test, toujours le même pour un avis_id donné."""
+    rang = int(hashlib.md5(str(avis_id).encode()).hexdigest()[:8], 16) % 100
+    if rang < PART_TRAIN:
+        return "train"
+    return "validation" if rang < PART_TRAIN + PART_VALIDATION else "test"
+
+
+def _sentiment(note):
+    """Étiquette dérivée des étoiles : 1-2 negatif, 3 neutre, 4-5 positif."""
+    if pd.isna(note):
+        return None
+    return "negatif" if note <= 2 else ("neutre" if note == 3 else "positif")
+
+
+CAR_DETECTION = 500  # langdetect n'a pas besoin du texte entier pour reconnaître la langue
 TAILLE_LOT_LANGUE = 2000
 
 # Langues possibles et probabilité de départ. Les avis viennent de sites français : sans ce
@@ -309,7 +334,7 @@ def detecter_langues(textes, nb_mots, verbose=True):
 
 
 def traiter_avis(df, ids_a_traiter=None, verbose=True):
-    """Entrée : lignes de la table `avis` (id, entreprise_id, titre, texte, date_publication,
+    """Entrée : lignes de la table `avis` (id, entreprise_id, note, titre, texte, date_publication,
     reponse_texte).
     Sortie : lignes prêtes pour la table `avis_traites`.
     ids_a_traiter : si donné, seuls ces avis sont renvoyés (les doublons sont quand même
@@ -350,8 +375,19 @@ def traiter_avis(df, ids_a_traiter=None, verbose=True):
     else:
         out["reponse_propre"] = None
 
-    out = out[["avis_id", "titre_propre", "texte_propre", "texte_complet", "nb_mots", "langue",
-               "est_doublon", "titre_tronque", "texte_court", "tout_majuscules", "reponse_propre"]]
+    # Pour l'entraînement : entreprise, étiquette (note -> sentiment), jeu fixe, version des règles
+    out["entreprise_id"] = df.loc[garder, "entreprise_id"].astype("int64")
+    if "note" in df.columns:
+        out["note"] = pd.to_numeric(df.loc[garder, "note"], errors="coerce").astype("Int64")
+    else:
+        out["note"] = pd.NA
+    out["sentiment"] = out["note"].map(_sentiment).astype(object)
+    out["jeu"] = out["avis_id"].map(_jeu)
+    out["version_nettoyage"] = VERSION_NETTOYAGE
+
+    out = out[["avis_id", "entreprise_id", "titre_propre", "texte_propre", "texte_complet", "nb_mots",
+               "langue", "est_doublon", "titre_tronque", "texte_court", "tout_majuscules", "reponse_propre",
+               "note", "sentiment", "jeu", "version_nettoyage"]]
 
     # On écarte doublons, textes vides et avis dans une autre langue que le français.
     # langue vide (< MIN_MOTS mots, trop court pour détecter) : gardé, les sites sources sont français.
@@ -366,6 +402,9 @@ def traiter_avis(df, ids_a_traiter=None, verbose=True):
               f"a_garder : {int(out.a_garder.sum())} | "
               f"réponses : {int(out.reponse_propre.notna().sum())}")
         print("Langues détectées :", out["langue"].value_counts(dropna=False).head(5).to_dict())
+        gardes = out[out["a_garder"]]
+        print("Avis gardés par sentiment et par jeu (vérifier l'équilibre) :")
+        print(pd.crosstab(gardes["sentiment"], gardes["jeu"], margins=True).to_string())
     return out
 
 
